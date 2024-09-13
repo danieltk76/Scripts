@@ -27,3 +27,20 @@ def send_email(subject, body):
     except Exception as e:
         print(f"Failed to send: {e}")
 
+def run_chkdsk():
+    print("running chkdsk...")
+    output = os.popen("chkdsk C:").read()
+    if "corrupt" in output.lower() or "errors" in output.lower():
+        print("File coruption detected!")
+        send_email("File Corruption Detected", output)
+        fix_output = os.popen("chkdsk C: /F").read()
+        if "corrected" in fix_output.lower() or "fixed" in fix_output.lower():
+            print("corruption fixed.")
+            send_email("File Corruption fixed", fix_output)
+        else:
+            send_email("Attempt to fix file corruption failed", fix_output)
+    else:
+        print("No corruption detected")
+
+if __name__ == "__main__":
+    run_chkdsk()
