@@ -1,0 +1,6 @@
+Some tips:
+1. Ensure you create a new task and give full admin priv
+2. make sure when creating the task you specify the correct 
+system version
+3. if you have a linux system, initiate a pull request to configure it
+Cheers!
