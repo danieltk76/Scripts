@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux-like Terminal Emulator</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+        body {
+            background-color: #1e1e1e;
+            color: #33ff00;
+            font-family: 'Courier New', monospace;
+        }
+        #terminal {
+            width: 100%;
+            height: 100%;
+            background-color: #0c0c0c;
+            padding: 10px;
+            box-sizing: border-box;
+            overflow-y: scroll;
+        }
+        #output {
+            margin-bottom: 20px;
+        }
+        #input-line {
+            display: flex;
+            align-items: center;
+        }
+        #prompt {
+            color: #33ff00;
+            margin-right: 5px;
+        }
+        #input {
+            flex-grow: 1;
+            background-color: transparent;
+            color: #33ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            border: none;
+            outline: none;
+        }
+        .output-line {
+            margin-bottom: 5px;
+        }
+        .cursor {
+            background-color: #33ff00;
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+        #fullscreen-btn {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background-color: #33ff00;
+            color: #0c0c0c;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        #editor {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 80%;
+            background-color: #1e1e1e;
+            border: 1px solid #33ff00;
+            padding: 10px;
+            z-index: 1000;
+        }
+        #editor textarea {
+            width: 100%;
+            height: calc(100% - 40px);
+            background-color: #0c0c0c;
+            color: #33ff00;
+            border: none;
+            resize: none;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        #editor-buttons {
+            margin-top: 10px;
+            text-align: right;
+        }
+        #editor-buttons button {
+            background-color: #33ff00;
+            color: #0c0c0c;
+            border: none;
+            padding: 5px 10px;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <button id="fullscreen-btn">Fullscreen</button>
+    <div id="terminal">
+        <div id="output"></div>
+        <div id="input-line">
+            <span id="prompt">user@localhost:~$</span>
+            <input type="text" id="input" autofocus>
+        </div>
+    </div>
+    <div id="editor">
+        <textarea id="editor-content"></textarea>
+        <div id="editor-buttons">
+            <button id="save-btn">Save</button>
+            <button id="cancel-btn">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        const terminal = document.getElementById('terminal');
+        const output = document.getElementById('output');
+        const input = document.getElementById('input');
+        const prompt = document.getElementById('prompt');
+
+        let commandHistory = [];
+        let historyIndex = -1;
+
+        function updatePrompt(path) {
+            prompt.textContent = `user@localhost:${path}$`;
+        }
+
+        function addOutput(text, isCommand = false) {
+            const line = document.createElement('div');
+            line.className = 'output-line';
+            if (isCommand) {
+                line.innerHTML = `<span style="color: #00aaff;">${prompt.textContent}</span> ${text}`;
+            } else {
+                line.textContent = text;
+            }
+            output.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        input.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                const command = input.value.trim();
+                if (command) {
+                    addOutput(command, true);
+                    commandHistory.push(command);
+                    historyIndex = commandHistory.length;
+
+                    fetch('/execute', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({command: command}),
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.output === "CLEAR_TERMINAL") {
+                            clearTerminal();
+                        } else if (data.output.startsWith("EDIT_FILE:")) {
+                            const [_, filename, content] = data.output.split(':');
+                            openEditor(filename, content);
+                        } else {
+                            addOutput(data.output);
+                            if (command.startsWith('cd ')) {
+                                updatePrompt(data.output.split(' ').pop());
+                            }
+                        }
+                    });
+
+                    input.value = '';
+                }
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    input.value = commandHistory[historyIndex];
+                }
+            } else if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                if (historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                    input.value = commandHistory[historyIndex];
+                } else {
+                    historyIndex = commandHistory.length;
+                    input.value = '';
+                }
+            }
+        });
+
+        // Simulated boot sequence
+        const bootSequence = [
+            "Initializing system...",
+            "Loading kernel modules...",
+            "Starting network services...",
+            "Mounting filesystems...",
+            "System ready."
+        ];
+
+        function simulateBoot() {
+            let i = 0;
+            const interval = setInterval(() => {
+                addOutput(bootSequence[i]);
+                i++;
+                if (i >= bootSequence.length) {
+                    clearInterval(interval);
+                    addOutput("Welcome to the Linux-like Terminal Emulator");
+                    addOutput("Type 'help' for a list of available commands.");
+                    input.focus();
+                }
+            }, 500);
+        }
+
+        simulateBoot();
+
+        // Blinking cursor effect
+        setInterval(() => {
+            input.classList.toggle('cursor');
+        }, 500);
+
+        // Add this new code for fullscreen functionality
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const terminalElement = document.getElementById('terminal');
+
+        fullscreenBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                if (terminalElement.requestFullscreen) {
+                    terminalElement.requestFullscreen();
+                } else if (terminalElement.mozRequestFullScreen) {
+                    terminalElement.mozRequestFullScreen();
+                } else if (terminalElement.webkitRequestFullscreen) {
+                    terminalElement.webkitRequestFullscreen();
+                } else if (terminalElement.msRequestFullscreen) {
+                    terminalElement.msRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            }
+        });
+
+        document.addEventListener('fullscreenchange', () => {
+            if (document.fullscreenElement) {
+                fullscreenBtn.textContent = 'Exit Fullscreen';
+            } else {
+                fullscreenBtn.textContent = 'Fullscreen';
+            }
+        });
+
+        function clearTerminal() {
+            output.innerHTML = '';
+        }
+
+        const editor = document.getElementById('editor');
+        const editorContent = document.getElementById('editor-content');
+        const saveBtn = document.getElementById('save-btn');
+        const cancelBtn = document.getElementById('cancel-btn');
+        let currentEditingFile = '';
+
+        function openEditor(filename, content) {
+            currentEditingFile = filename;
+            editorContent.value = content;
+            editor.style.display = 'block';
+        }
+
+        function closeEditor() {
+            editor.style.display = 'none';
+            currentEditingFile = '';
+            editorContent.value = '';
+        }
+
+        saveBtn.addEventListener('click', function() {
+            const content = editorContent.value;
+            fetch('/save_file', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({filename: currentEditingFile, content: content}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                addOutput(data.output);
+                closeEditor();
+            });
+        });
+
+        cancelBtn.addEventListener('click', closeEditor);
+    </script>
+</body>
+</html>
